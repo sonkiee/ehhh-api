@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# env
+.env
+
+# air / build output
+tmp/
+*.log
+
+# go build outputs (optional)
+*.exe
+*.out
