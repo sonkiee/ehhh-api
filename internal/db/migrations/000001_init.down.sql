@@ -1,0 +1,11 @@
+DROP TABLE IF EXITS reports;
+
+DROP TABLE IF EXISTS comments;
+
+DROP TABLE IF EXISTS votes;
+
+DROP TABLE IF EXISTS dilemma_options;
+
+DROP TABLE IF EXISTS dilemmas;
+
+DROP TABLE IF EXISTS users;
