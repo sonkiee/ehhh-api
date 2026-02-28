@@ -1,31 +1,50 @@
 package main
 
 import (
+	"context"
 	"log"
+	"net/http"
 	"os"
+	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/sonkiee/ehhh-api/internal/handler"
-	"github.com/sonkiee/ehhh-api/internal/repository"
-	"github.com/sonkiee/ehhh-api/internal/routes"
-	"github.com/sonkiee/ehhh-api/internal/service"
+	"github.com/joho/godotenv"
+	"github.com/sonkiee/ehhh-api/internal/config"
+	"github.com/sonkiee/ehhh-api/internal/db"
+	"github.com/sonkiee/ehhh-api/internal/httpapi"
+	"github.com/sonkiee/ehhh-api/internal/repo"
 )
 
 func main() {
-	gin.SetMode(gin.ReleaseMode)
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+
+	// Load environment variables from .env file if it exists
+	if os.Getenv("APP_ENV") != "production" {
+		_ = godotenv.Load()
 	}
-	// TODO: swap these with Postgres implementations later
-	dRepo := repository.NewInMemoryDilemmaRepo() // implement
-	vRepo := repository.NewInMemoryVoteRepo()    // implement
 
-	svc := service.NewDilemmaService(dRepo, vRepo)
-	h := handler.NewDilemmaHandler(svc)
+	cfg := config.LoadConfig()
 
-	r := routes.Setup(h)
+	ctx := context.Background()
 
-	log.Printf("listening on :%s", port)
-	log.Fatal(r.Run(":" + port))
+	pool, err := db.NewPool(ctx, cfg.DBURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer pool.Close()
+
+	q := repo.New(pool)
+
+	router := httpapi.NewRouter(httpapi.Deps{
+		UserHandler:    httpapi.NewUsersAPI(q),
+		DilemmaHandler: httpapi.NewDilemmasAPI(pool, q),
+		VoteHandler:    httpapi.NewVotesAPI(q),
+		CommentHandler: httpapi.NewCommentsAPI(q),
+		ReportHandler:  httpapi.NewReportsAPI(q),
+		Timeout:        time.Duration(cfg.Timeout) * time.Second,
+	})
+
+	addr := ":" + cfg.Port
+	log.Printf("starting server on %s", addr)
+	log.Fatal(http.ListenAndServe(addr, router))
+
 }

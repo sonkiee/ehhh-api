@@ -3,10 +3,10 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sonkiee/ehhh-api/internal/repo"
 	"github.com/sonkiee/ehhh-api/internal/util"
@@ -29,11 +29,11 @@ func NewDilemmasAPI(pool *pgxpool.Pool, q *repo.Queries) http.Handler {
 func (a *DilemmasAPI) create(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
-		UserID      string `json:"user_id"`
+		UserID      string `json:"userId"`
 		Title       string `json:"title"`
-		IsAnonymous bool   `json:"is_anonymous"`
-		OptionA     string `json:"option_a"`
-		OptionB     string `json:"option_b"`
+		IsAnonymous bool   `json:"isAnonymous"`
+		OptionA     string `json:"optionA"`
+		OptionB     string `json:"optionB"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -41,8 +41,25 @@ func (a *DilemmasAPI) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.UserID == "" || req.Title == "" || req.OptionA == "" || req.OptionB == "" {
-		util.WriteError(w, http.StatusBadRequest, "missing required fields")
+	fmt.Printf("Received create dilemma request: %+v\n", req)
+
+	errors := make(map[string]string)
+
+	if req.UserID == "" {
+		errors["userId"] = "userId is required"
+	}
+	if req.Title == "" {
+		errors["title"] = "title is required"
+	}
+	if req.OptionA == "" {
+		errors["optionA"] = "optionA is required"
+	}
+	if req.OptionB == "" {
+		errors["optionB"] = "optionB is required"
+	}
+
+	if len(errors) > 0 {
+		util.WriteJSON(w, http.StatusBadRequest, errors)
 		return
 	}
 
@@ -56,8 +73,13 @@ func (a *DilemmasAPI) create(w http.ResponseWriter, r *http.Request) {
 
 	qtx := a.q.WithTx(tx)
 
+	userID, err := util.ParseUUID(req.UserID)
+	if err != nil {
+		util.WriteError(w, http.StatusBadRequest, "userId must be a valid UUID")
+		return
+	}
 	d, err := qtx.CreateDilemma(ctx, repo.CreateDilemmaParams{
-		UserID:      mustUUID(req.UserID),
+		UserID:      userID,
 		Title:       req.Title,
 		IsAnonymous: req.IsAnonymous,
 	})
@@ -99,7 +121,12 @@ func (a *DilemmasAPI) create(w http.ResponseWriter, r *http.Request) {
 
 func (a *DilemmasAPI) get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	d, err := a.q.GetDilemma(r.Context(), mustUUID(id))
+	parsedID, err := util.ParseUUID(id)
+	if err != nil {
+		util.WriteError(w, 400, "invalid id format")
+		return
+	}
+	d, err := a.q.GetDilemma(r.Context(), parsedID)
 	if err != nil {
 		util.WriteError(w, 404, "not found")
 		return
@@ -122,59 +149,6 @@ func (a *DilemmasAPI) feed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	util.WriteJSON(w, http.StatusOK, rows)
-}
-
-func mustUUID(s string) [16]byte {
-	u := parseUUIDOrPanic(s)
-	return u
-}
-
-func parseUUIDOrPanic(s string) [16]byte {
-	// keep this file small: use google/uuid
-	// implemented below using a tiny wrapper
-	return uuidFromString(s)
-}
-
-// separated to avoid clutter
-func uuidFromString(s string) [16]byte {
-	u := mustParseUUID(s)
-	return u
-}
-
-func mustParseUUID(s string) [16]byte {
-	u, err := parseUUID(s)
-	if err != nil {
-		panic(err)
-	}
-	return u
-}
-
-func parseUUID(s string) ([16]byte, error) {
-	// local inline adapter to repo UUID type (sqlc uses [16]byte for UUID by default with pgx)
-	// use google/uuid
-	id, err := uuidParse(s)
-	if err != nil {
-		return [16]byte{}, err
-	}
-	return id, nil
-}
-
-func uuidParse(s string) ([16]byte, error) {
-	// actual google/uuid call
-	// (kept separate so you can swap UUID lib later)
-	u, err := parseGoogleUUID(s)
-	return u, err
-}
-
-func parseGoogleUUID(s string) ([16]byte, error) {
-	// import is required at top: "github.com/google/uuid"
-	u, err := uuid.Parse(s)
-	if err != nil {
-		return [16]byte{}, err
-	}
-	var out [16]byte
-	copy(out[:], u[:])
-	return out, nil
 }
 
 var _ = context.Background()

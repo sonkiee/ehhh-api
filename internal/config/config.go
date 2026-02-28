@@ -10,7 +10,7 @@ type Config struct {
 	AppEnv  string
 	Port    string
 	DBURL   string
-	Timeout string
+	Timeout int
 }
 
 func LoadConfig() Config {
@@ -25,7 +25,7 @@ func LoadConfig() Config {
 		AppEnv:  os.Getenv("APP_ENV"),
 		Port:    os.Getenv("PORT"),
 		DBURL:   os.Getenv("DATABASE_URL"),
-		Timeout: strconv.Itoa(timeout) + "s",
+		Timeout: timeout,
 	}
 
 	if cfg.Port == "" {

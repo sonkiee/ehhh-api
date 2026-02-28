@@ -21,19 +21,26 @@ func NewUsersAPI(q *repo.Queries) http.Handler {
 }
 
 func (a *UsersAPI) create(w http.ResponseWriter, r *http.Request) {
+
 	var req struct {
 		Username string `json:"username"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Username == "" {
 
-		util.WriteError(w, http.StatusNotFound, "invalid body")
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Username == "" {
+		util.WriteError(w, http.StatusBadRequest, "invalid body")
 		// util.WriteError(w, 400, "invalid body")
+		return
+	}
+
+	_, err := a.q.GetUserByUsername(r.Context(), req.Username)
+	if err == nil {
+		util.WriteError(w, http.StatusBadRequest, ErrUsernameTaken.Error())
 		return
 	}
 
 	u, err := a.q.CreateUser(r.Context(), req.Username)
 	if err != nil {
-		util.WriteError(w, 400, err.Error())
+		util.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	util.WriteJSON(w, http.StatusCreated, u)
